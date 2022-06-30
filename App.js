@@ -12,6 +12,9 @@ import {
   Image,
   StatusBar,
   ActivityIndicator,
+  Dimensions,
+  ImageBackground,
+  LogBox,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -21,19 +24,48 @@ import axios from "axios";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { manipulateAsync, FlipType, SaveFormat } from "expo-image-manipulator";
+import ExpoImageManipulator from "./manipulator/ImageManipulator";
+
+LogBox.ignoreAllLogs();
 
 let cdata = {};
 
+function LandingScreen(props) {
+  useEffect(() => {
+    (async () => {
+      await Camera.requestCameraPermissionsAsync();
+    })();
+  }, []);
+
+  return (
+    <SafeAreaView style={styles.containerSimple}>
+      <StatusBar animated={true} backgroundColor="black" />
+      <TouchableOpacity
+        activeOpacity={0.6}
+        style={styles.LandingButton}
+        onPress={() => props.navigation.navigate("Home")}
+      >
+        <Text style={styles.landingTextColor}>UPLOAD DOCUMENT</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+}
+
 function LastScreen(props) {
-  const [ready, setReady] = useState(false);
-  const [image, setImage] = useState(null);
   const [load, setLoad] = useState(false);
   const [showTrick, setShowTick] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [uri, setUri] = useState(cdata.photo.uri);
+  const { width, height } = Dimensions.get("window");
+  const noImage = require("./assets/no_image.png");
 
   useEffect(() => {
-    setImage(cdata.photo.uri);
-    setReady(true);
+    setUri(cdata.photo.uri);
   }, []);
+
+  const onToggleModal = () => {
+    setIsVisible(!isVisible);
+  };
 
   const sendData = async () => {
     setLoad(true);
@@ -56,24 +88,6 @@ function LastScreen(props) {
         alert("Something went Wrong");
       });
   };
-
-  const _rotate90andFlip = async () => {
-    const manipResult = await manipulateAsync(
-      image.uri ? image.uri : image,
-      [({ rotate: 90 }, { flip: FlipType.Vertical })],
-      { compress: 1, format: SaveFormat.PNG }
-    );
-    setImage(manipResult);
-  };
-
-  const _renderImage = () => (
-    <View style={styles.imageContainer}>
-      <Image
-        source={{ uri: image.uri ? image.uri : image }}
-        style={styles.image}
-      />
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.containerSimple}>
@@ -124,19 +138,61 @@ function LastScreen(props) {
               : `CNIC ${cdata.qr} - Upload Complete`}
           </Text>
           <TouchableOpacity
-            onPress={() => props.navigation.popToTop()}
+            onPress={() => props.navigation.pop(2)}
             style={styles.uploadDocButton}
           >
             <Text style={styles.uploadText}>Upload Next Doc</Text>
           </TouchableOpacity>
         </>
       ) : (
-        ready && image && _renderImage()
+        <View
+          style={{
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          {uri ? (
+            <Image
+              resizeMode="contain"
+              style={{
+                width,
+                height: height - 130,
+                backgroundColor: "#fcfcfc",
+              }}
+              source={{ uri }}
+            />
+          ) : (
+            <Image source={noImage} />
+          )}
+
+          {uri && (
+            <ExpoImageManipulator
+              photo={{ uri }}
+              isVisible={isVisible}
+              onPictureChoosed={(data) => {
+                // console.log(data)
+                cdata["photo"] = data;
+                setUri(data.uri);
+              }}
+              // fixedMask={{ width: 200, height: 200 }}
+              onToggleModal={onToggleModal}
+              saveOptions={{
+                compress: 1,
+                format: "png",
+                base64: true,
+              }}
+              btnTexts={{
+                done: "Done",
+                crop: "Crop",
+                processing: "Processing",
+              }}
+            />
+          )}
+        </View>
       )}
 
       {!showTrick && (
         <View style={styles.bottomNav}>
-          {/* <Button title="Rotate and Flip" onPress={_rotate90andFlip} /> */}
           <Text style={styles.cancelText}>Cancel</Text>
           <Svg
             width="48"
@@ -144,10 +200,11 @@ function LastScreen(props) {
             viewBox="0 0 48 48"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
+            onPress={onToggleModal}
           >
             <Path
               d="M0 24C0 10.7452 10.7452 0 24 0C37.2548 0 48 10.7452 48 24C48 37.2548 37.2548 48 24 48C10.7452 48 0 37.2548 0 24Z"
-              fill="#3A3F47"
+              fill="#1390D7"
             />
             <Path
               d="M17.9995 18H14.2502"
@@ -182,7 +239,7 @@ function LastScreen(props) {
             style={[
               styles.UploadButtonText,
               {
-                color: load ? "lightgrey" : "black",
+                color: load ? "lightgrey" : "#1390D7",
               },
             ]}
             onPress={load ? null : sendData}
@@ -204,25 +261,25 @@ function HomeScreen(props) {
       setScanned(false);
       setHasPermission(false);
       (async () => {
-        const { status } = await BarCodeScanner.requestPermissionsAsync();
+        const { status } = await Camera.requestCameraPermissionsAsync();
         setHasPermission(status === "granted");
       })();
     });
     return unsubscribe;
   }, [props.navigation]);
 
+  if (hasPermission === null) {
+    return <View />;
+  }
+  if (hasPermission === false) {
+    return <Text>No access to camera</Text>;
+  }
+
   const handleBarCodeScanned = ({ type, data }) => {
     setScanned(true);
     cdata["qr"] = data;
     props.navigation.navigate("Details");
   };
-
-  if (hasPermission === null) {
-    return <Text>Requesting for camera permission</Text>;
-  }
-  if (hasPermission === false) {
-    return <Text>No access to camera</Text>;
-  }
 
   return (
     <SafeAreaView style={styles.constainerCamera}>
@@ -233,6 +290,7 @@ function HomeScreen(props) {
           size={32}
           color="black"
           style={styles.backIcon}
+          onPress={() => props.navigation.goBack()}
         />
         <Text style={styles.titleText}>Scan QR Code</Text>
         <Text style={styles.shortTitleText}>
@@ -240,7 +298,11 @@ function HomeScreen(props) {
         </Text>
         <Ionicons name="menu" size={32} color="black" style={styles.menuIcon} />
       </View>
-      <BarCodeScanner
+
+      <Camera
+        barCodeScannerSettings={{
+          barCodeTypes: [BarCodeScanner.Constants.BarCodeType.qr],
+        }}
         onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
         style={styles.barcodeView}
       >
@@ -259,16 +321,15 @@ function HomeScreen(props) {
           />
         </Svg>
         <Text style={styles.qrText}>Scan QR Code</Text>
-      </BarCodeScanner>
+      </Camera>
     </SafeAreaView>
   );
 }
 
 function DetailsScreen(props) {
   const [hasPermission, setHasPermission] = useState(null);
-  const [type, setType] = useState(CameraType.back);
+
   let cameraRef = useRef();
-  const [photo, setPhoto] = useState();
 
   useEffect(() => {
     const unsubscribe = props.navigation.addListener("focus", () => {
@@ -293,6 +354,7 @@ function DetailsScreen(props) {
       quality: 1,
       base64: true,
       exif: false,
+      skipProcessing: true,
     };
     let nphoto = await cameraRef.current.takePictureAsync(options);
     cdata["photo"] = nphoto;
@@ -319,13 +381,13 @@ function DetailsScreen(props) {
       <Camera
         autoFocus={false}
         style={styles.cameraStyling}
-        type={type}
+        type={CameraType.back}
         ref={cameraRef}
       >
         <View style={styles.overlay}>
           <Text style={styles.overlayText}>
             {cdata.qr == "Passport"
-              ? `Upload ${cdata.qr} size photo`
+              ? `Upload ${cdata.qr} Size Photo`
               : `Upload CNIC ${cdata.qr}`}
           </Text>
         </View>
@@ -366,11 +428,12 @@ function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Home"
+        initialRouteName="Landing"
         screenOptions={{
           headerShown: false,
         }}
       >
+        <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Details" component={DetailsScreen} />
         <Stack.Screen name="Last" component={LastScreen} />
@@ -533,5 +596,15 @@ const styles = StyleSheet.create({
     right: 25,
     fontSize: 18,
     fontWeight: "400",
+  },
+  LandingButton: {
+    backgroundColor: "#1390D7",
+    padding: 20,
+    borderRadius: 10,
+    borderColor: "#1390D7",
+    borderWidth: 1,
+  },
+  landingTextColor: {
+    color: "white",
   },
 });
