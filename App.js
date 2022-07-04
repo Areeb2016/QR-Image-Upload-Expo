@@ -68,9 +68,11 @@ function LastScreen(props) {
   };
 
   const sendData = async () => {
+    const dataQr = {};
+    dataQr["qr"] = cdata.qr;
     setLoad(true);
     axios
-      .post("http://192.168.18.12:8000/uploading", cdata)
+      .post("http://192.168.18.12:8000/uploading", dataQr)
       .then((result) => onUploadData())
       .catch((error) => console.log("error", error));
   };
